@@ -347,6 +347,11 @@ def init_welcome_screen(game: engine.Game):
     game.menu_items.append(
         Text(f"Show FPS [{'ON' if game.show_fps else 'OFF'}]", white)
     )
+    if game.show_fps:
+        if game.fps_column != 0:
+            game.screen.delete(0, game.fps_column)
+        game.screen.place(fps, 0, game.screen.width - fps.length - 5)
+        game.fps_column = game.screen.width - fps.length - 5
     game.menu_items.append(Text("Quit", white))
 
     base_row = 5 + big_font.height + 5
