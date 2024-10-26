@@ -5,10 +5,10 @@ A terminal based re-creation of a famous game involving a pesky bird.
 
 ## Installation & Run
 
-First you need the pygamelib 1.3.0 (or 1.2.990+ during the beta version). For the moment, you can only get it from test.pypi.org.
+First you need the pygamelib 1.3.0+, you can install it with pip:
 
 ```bash
-pip install -i https://test.pypi.org/simple/ pygamelib
+pip install pygamelib
 ```
 
 Then you don't really need to install the game, just run pyscii-bird.py:
