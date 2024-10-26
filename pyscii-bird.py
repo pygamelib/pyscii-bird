@@ -1,15 +1,29 @@
 from pygamelib import engine, board_items, constants, functions
 from pygamelib.base import Vector2D, Text
 from pygamelib.gfx.core import Color, Sprite, Sprixel, Font, SpriteCollection
+from pygamelib.gfx.particles import (
+    SpriteEmitter,
+    EmitterProperties,
+    ParticleSprixel,
+    Particle,
+    ColorParticle,
+    ParticleEmitter,
+)
+from pygamelib.assets import graphics
 import time
 import random
+
+# WARNING: This is not a state of the art implementation.
+# The bulk of this should be in a big wrapping class to avoid global variables.
+# The algorithm can use some optimizations.
+
 
 # Define constants
 GRAVITY = Vector2D(300, 0)
 # FLAP_COEFFICIENT = 0.075
 FLAP_COEFFICIENT = 0.09
 OBSTACLES_SPEED = 50
-OBSTACLES_HOLE_SIZE = 15
+OBSTACLES_HOLE_SIZE = 20
 OBSTACLES_GAP_SIZE = 80
 OBSTACLES_WIDTH = 12
 OBSTACLES_MIN_HEIGHT = 1
@@ -30,46 +44,67 @@ big_font = Font("8bits")
 wasted_text = Text("WASTED", font=big_font, fg_color=red, bg_color=sky_blue)
 # graphic_assets = SpriteCollection.load_json_file("pb_bg.spr")
 # city_bg = graphic_assets["pb_bg"]
+hd_player = SpriteCollection.load_json_file("player.spr")
+ascii_bird_fall = hd_player["bird_fall"]
+ascii_bird_flap = hd_player["bird_flap"]
+ascii_bird_fall.null_sprixel = Sprixel()
+ascii_bird_flap.null_sprixel = Sprixel()
+
+# Define particle system's properties for the bird explosion
+expl_props = EmitterProperties(
+    variance=4.0,
+    emit_number=1,
+    emit_rate=0.01,
+    lifespan=1,
+    particle=Particle(
+        sprixel=ParticleSprixel(graphics.GeometricShapes.BULLET, bg_color=sky_blue),
+    ),
+    particle_lifespan=150,
+)
+PARTICLE_GRAVITY = Vector2D(0.1, 0.0)
+# Define a global array for the particle emitters
+particle_emitters = []
+
 
 # Define game sprites.
 
-ascii_bird_fall = Sprite(
-    sprixels=[
-        [
-            Sprixel(" ", fg_color=bird_color, bg_color=sky_blue),
-            Sprixel("\\", fg_color=bird_color, bg_color=sky_blue),
-            Sprixel("\\", fg_color=bird_color, bg_color=sky_blue),
-            Sprixel(" ", fg_color=bird_color, bg_color=sky_blue),
-            Sprixel(" ", fg_color=bird_color, bg_color=sky_blue),
-        ],
-        [
-            Sprixel(" ", fg_color=bird_color, bg_color=sky_blue),
-            Sprixel("<", fg_color=bird_color, bg_color=sky_blue),
-            Sprixel("\\", fg_color=bird_color, bg_color=sky_blue),
-            Sprixel("\\", fg_color=bird_color, bg_color=sky_blue),
-            Sprixel("Q", fg_color=bird_color, bg_color=sky_blue),
-        ],
-    ]
-)
+# ascii_bird_fall = Sprite(
+#     sprixels=[
+#         [
+#             Sprixel(" ", fg_color=bird_color, bg_color=sky_blue),
+#             Sprixel("\\", fg_color=bird_color, bg_color=sky_blue),
+#             Sprixel("\\", fg_color=bird_color, bg_color=sky_blue),
+#             Sprixel(" ", fg_color=bird_color, bg_color=sky_blue),
+#             Sprixel(" ", fg_color=bird_color, bg_color=sky_blue),
+#         ],
+#         [
+#             Sprixel(" ", fg_color=bird_color, bg_color=sky_blue),
+#             Sprixel("<", fg_color=bird_color, bg_color=sky_blue),
+#             Sprixel("\\", fg_color=bird_color, bg_color=sky_blue),
+#             Sprixel("\\", fg_color=bird_color, bg_color=sky_blue),
+#             Sprixel("Q", fg_color=bird_color, bg_color=sky_blue),
+#         ],
+#     ]
+# )
 
-ascii_bird_flap = Sprite(
-    sprixels=[
-        [
-            Sprixel(" ", fg_color=bird_color, bg_color=sky_blue),
-            Sprixel("<", fg_color=bird_color, bg_color=sky_blue),
-            Sprixel("/", fg_color=bird_color, bg_color=sky_blue),
-            Sprixel("/", fg_color=bird_color, bg_color=sky_blue),
-            Sprixel("Q", fg_color=bird_color, bg_color=sky_blue),
-        ],
-        [
-            Sprixel(" ", fg_color=bird_color, bg_color=sky_blue),
-            Sprixel("/", fg_color=bird_color, bg_color=sky_blue),
-            Sprixel("/", fg_color=bird_color, bg_color=sky_blue),
-            Sprixel(" ", fg_color=bird_color, bg_color=sky_blue),
-            Sprixel(" ", fg_color=bird_color, bg_color=sky_blue),
-        ],
-    ]
-)
+# ascii_bird_flap = Sprite(
+#     sprixels=[
+#         [
+#             Sprixel(" ", fg_color=bird_color, bg_color=sky_blue),
+#             Sprixel("<", fg_color=bird_color, bg_color=sky_blue),
+#             Sprixel("/", fg_color=bird_color, bg_color=sky_blue),
+#             Sprixel("/", fg_color=bird_color, bg_color=sky_blue),
+#             Sprixel("Q", fg_color=bird_color, bg_color=sky_blue),
+#         ],
+#         [
+#             Sprixel(" ", fg_color=bird_color, bg_color=sky_blue),
+#             Sprixel("/", fg_color=bird_color, bg_color=sky_blue),
+#             Sprixel("/", fg_color=bird_color, bg_color=sky_blue),
+#             Sprixel(" ", fg_color=bird_color, bg_color=sky_blue),
+#             Sprixel(" ", fg_color=bird_color, bg_color=sky_blue),
+#         ],
+#     ]
+# )
 
 # Performance global structure and text
 perf_data = {
@@ -186,6 +221,8 @@ def update_fps(game: engine.Game):
 def reset_game(game: engine.Game):
     game.player.value = 0
     game.score_label.text = "0"
+    game.player.is_alive = True
+    game.user_update = update_game
     for obstacle_pair in obstacles:
         for obstacle in obstacle_pair:
             game.screen.delete(obstacle.screen_row, obstacle.screen_column)
@@ -231,6 +268,47 @@ def update_paused(game: engine.Game, inkey, dt):
         game.run()
     elif inkey == "Q":
         game.stop()
+    game.screen.update()
+
+
+def death_animation_update(game: engine.Game, inkey, dt):
+    for _ in range(len(particle_emitters) - 1, -1, -1):
+        emt = particle_emitters.pop()
+        if emt.finished():
+            game.screen.delete(emt.row, emt.column)
+            game.screen.place(sky_blue_sprixel, emt.row, emt.column)
+            continue
+        emt.apply_force(PARTICLE_GRAVITY)
+        emt.emit()
+        emt.update()
+        particle_emitters.append(emt)
+    if len(particle_emitters) == 0:
+        game.screen.place(
+            sky_blue_sprixel, game.player.screen_row, game.player.screen_row
+        )
+        game.screen.place(
+            sky_blue_sprixel, game.player.screen_row - 1, game.player.screen_row
+        )
+        game.screen.place(
+            wasted_text,
+            game.screen.height // 2,
+            game.screen.width // 2 - wasted_text.length // 2,
+            2,
+        )
+        rt = Text(
+            "Press ENTER to play again or ESC to quit.",
+            white,
+            sky_blue,
+            style=constants.BOLD,
+        )
+        game.screen.place(
+            rt,
+            game.screen.height // 2 + 5,
+            game.screen.width // 2 - rt.length // 2,
+            2,
+        )
+        game.pause()
+    game.screen.force_update()
 
 
 def update_game(game: engine.Game, inkey, dt):
@@ -270,26 +348,21 @@ def update_game(game: engine.Game, inkey, dt):
         bird_collides_with_obstacle(game)
         or game.player.screen_row + game.player.height >= game.screen.height
     ):
-
+        game.player.is_alive = False
+        game.user_update = death_animation_update
+        game.player.velocity.row = 0
+        game.player.velocity.column = 0
+        game.screen.delete(game.player.screen_row, game.player.screen_column)
         game.screen.place(
-            wasted_text,
-            game.screen.height // 2,
-            game.screen.width // 2 - wasted_text.length // 2,
-            2,
+            sky_blue_sprixel, game.player.screen_row, game.player.screen_column
         )
-        rt = Text(
-            "Press ENTER to play again or ESC to quit.",
-            white,
-            sky_blue,
-            style=constants.BOLD,
+        expl_props.row = game.player.screen_row - 1
+        expl_props.column = game.player.screen_column
+        sprite_emitter = SpriteEmitter(
+            sprite=game.player.sprite, emitter_properties=expl_props
         )
-        game.screen.place(
-            rt,
-            game.screen.height // 2 + 5,
-            game.screen.width // 2 - rt.length // 2,
-            2,
-        )
-        game.pause()
+        game.screen.place(sprite_emitter, expl_props.row - 1, expl_props.column, 2)
+        particle_emitters.append(sprite_emitter)
     # else:
     #     # Check score
     #     for obstacle_pair in obstacles:
@@ -411,11 +484,14 @@ def main():
         user_update=welcome_screen,
         user_update_paused=update_paused,
         mode=constants.MODE_RT,
-        player=board_items.ComplexPlayer(sprite=ascii_bird_fall, value=0),
+        player=board_items.ComplexPlayer(
+            sprite=ascii_bird_fall, value=0, null_sprixel=Sprixel()
+        ),
     )
     setattr(game, "welcome_screen_initialized", False)
     setattr(game, "show_fps", False)
     setattr(game, "fps_column", 0)
+    setattr(game.player, "is_alive", True)
     game.run()
 
 
