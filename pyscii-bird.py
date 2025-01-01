@@ -50,6 +50,9 @@ ascii_bird_flap = hd_player["bird_flap"]
 ascii_bird_fall.null_sprixel = Sprixel()
 ascii_bird_flap.null_sprixel = Sprixel()
 
+# Speed modificator to increase difficulty as the game goes
+obstacles_speed_modificator = 1.0
+
 # Define particle system's properties for the bird explosion
 expl_props = EmitterProperties(
     variance=4.0,
@@ -167,16 +170,22 @@ def move_player(game: engine.Game, new_row: int):
 
 
 def move_obstacles(game: engine.Game, dt):
+    global obstacles_speed_modificator
     to_remove = []
     for obstacle_pair in obstacles:
         for obstacle in obstacle_pair:
-            new_col = round(obstacle.column - OBSTACLES_SPEED * dt)
+            new_col = round(
+                obstacle.column - OBSTACLES_SPEED * obstacles_speed_modificator * dt
+            )
             if (
                 obstacle == obstacle_pair[0]
                 and not obstacle.scored
                 and new_col <= game.player.screen_column
             ):
                 game.player.value += 1
+                # if game.player.value % 5 == 0:
+                #     obstacles_speed_modificator += 0.1
+                obstacles_speed_modificator += 0.02
                 game.score_label.text = str(game.player.value)
                 obstacle.scored = True
             game.screen.delete(obstacle.screen_row, obstacle.screen_column)
@@ -219,6 +228,7 @@ def update_fps(game: engine.Game):
 
 
 def reset_game(game: engine.Game):
+    global obstacles_speed_modificator
     game.player.value = 0
     game.score_label.text = "0"
     game.player.is_alive = True
@@ -252,6 +262,7 @@ def reset_game(game: engine.Game):
     game.player.last_flap = 0
     game.player.velocity = Vector2D(0, 0)
     game.player.acceleration = Vector2D(0, 0)
+    obstacles_speed_modificator = 1.0
     move_player(game, game.screen.height // 2)
 
 
